@@ -296,7 +296,9 @@
     <div id="thermalArea"></div>
 
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>  
+<script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    
 <script>
     const firebaseConfig = { databaseURL: "https://sample-firebase-ai-app-e4260-default-rtdb.firebaseio.com/" };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -764,39 +766,24 @@ function printSingle(d) { printThermal(d, false); }
 }
     
 
-    function printThermalFinal(d, isAgg) {
-        const area = document.getElementById("thermalArea");
-        area.innerHTML = `
-            <div class="print-header"><img src="${logoUrl}" class="header-logo-img"><div style="text-align:right; flex:1;"><h2 style="font-size:15px; font-weight:900; margin:0;">${isAgg ? Array.from(d.bNames).join("+") : d.branchName}</h2><div style="font-size:10px;">تقرير جرد ${isAgg?'مجمع':''}</div></div></div>
-            <table class="receipt-table"><tr><td>${d.day||'---'}</td><td>${d.date}</td><td>${isAgg?'مجمع':'درج '+(d.drawer||1)}</td></tr></table>
-            <table class="receipt-table" style="font-size:12px; margin-top:8px;"><tr><td>كاش</td><td>${(+d.cash||0).toLocaleString()}</td></tr><tr><td>انستا/محافظ</td><td>${(sum(d.insta)+sum(d.wallet)).toLocaleString()}</td></tr><tr><td>فيزا</td><td>${sum(d.visa).toLocaleString()}</td></tr><tr style="font-weight:900;"><td>إجمالي</td><td>${(+d.total||0).toLocaleString()}</td></tr><tr style="background:#eee"><td>POS</td><td>${(+d.actual||0).toLocaleString()}</td></tr><tr style="color:${+d.diff<0?'red':'green'}"><td>الفرق</td><td>${d.diff}</td></tr></table>
-            <div style="text-align:center; font-size:9px; margin-top:10px; border-top:1px dashed #000; padding-top:5px;">المراجع: ${currentUser.name} - ${new Date().toLocaleString('ar-EG')}</div>`;
-  
-    }
-    // دالة فتح نافذة كشف الحساب
+    // 1. مخزن مؤقت للبيانات لغرض التصدير
+let lastResults = []; 
+
+// 2. دالة فتح النافذة (تأكد من وجود ID صحيح للنافذة)
 function openStatement() {
-    const popup = document.getElementById('statementPopup');
-    if (popup) {
-        popup.style.display = 'flex';
-        
-        // تعبئة قائمة الفروع في الفلتر تلقائياً عند الفتح لأول مرة
-        const fb = document.getElementById('filterBranch');
-        if (fb && fb.options.length <= 1) {
-            db.ref("branches").once("value").then(snap => {
-                snap.forEach(child => {
-                    const opt = document.createElement('option');
-                    opt.value = child.key;
-                    opt.text = child.val().name;
-                    fb.add(opt);
-                });
+    document.getElementById('statementPopup').style.display = 'flex';
+    const fb = document.getElementById('filterBranch');
+    // تعبئة قائمة الفروع مرة واحدة فقط عند الفتح
+    if(fb && fb.options.length <= 1) {
+        db.ref("branches").once("value").then(snap => {
+            snap.forEach(c => { 
+                fb.innerHTML += `<option value="${c.key}">${c.val().name}</option>`; 
             });
-        }
-    } else {
-        alert("خطأ: لم يتم العثور على هيكل النافذة (Modal) في ملف HTML");
+        });
     }
 }
 
-// دالة جلب البيانات ومعالجتها للعرض في الجدول
+// 3. دالة جلب البيانات ومعالجتها
 function generateStatement() {
     const type = document.getElementById('filterType').value;
     const branch = document.getElementById('filterBranch').value;
@@ -804,47 +791,73 @@ function generateStatement() {
     const dTo = document.getElementById('filterDateTo').value;
     const tbody = document.getElementById('statementBody');
     
-    tbody.innerHTML = '<tr><td colspan="6" class="p-10">⏳ جاري تحميل البيانات...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="p-10 text-center">⏳ جاري جلب البيانات...</td></tr>';
 
     db.ref("treasury").once("value").then(snapshot => {
-        let results = [];
+        lastResults = []; // تفريغ النتائج السابقة
         snapshot.forEach(child => {
             let record = child.val();
-            // فلترة التاريخ والفرع
+            // فلاتر التاريخ والفرع
             if(dFrom && record.date < dFrom) return;
             if(dTo && record.date > dTo) return;
             if(branch !== "all" && record.branchKey !== branch) return;
 
+            // تجميع بيانات انستا، محفظة، وفيزا
             if((type === "all" || type === "insta") && record.insta) {
-                record.insta.forEach(i => results.push({ date: record.date, bName: record.branchName, type: "انستا", amt: i.amount, id: i.mobile, det: i.name }));
+                record.insta.forEach(i => lastResults.push({ date: record.date, bName: record.branchName, type: "انستا", amt: i.amount, id: i.mobile, det: i.name }));
             }
             if((type === "all" || type === "wallet") && record.wallet) {
-                record.wallet.forEach(w => results.push({ date: record.date, bName: record.branchName, type: "محفظة", amt: w.amount, id: w.mobile, det: w.name }));
+                record.wallet.forEach(w => lastResults.push({ date: record.date, bName: record.branchName, type: "محفظة", amt: w.amount, id: w.mobile, det: w.name }));
             }
             if((type === "all" || type === "visa") && record.visa) {
-                record.visa.forEach(v => results.push({ date: record.date, bName: record.branchName, type: "فيزا", amt: v.amount, id: v.batch, det: v.calcDetails || "---" }));
+                record.visa.forEach(v => lastResults.push({ date: record.date, bName: record.branchName, type: "فيزا", amt: v.amount, id: v.batch, det: v.calcDetails || "---" }));
             }
         });
 
-        results.sort((a,b) => new Date(b.date) - new Date(a.date));
+        // ترتيب من الأحدث للأقدم
+        lastResults.sort((a,b) => new Date(b.date) - new Date(a.date));
         
+        // عرض البيانات في الجدول
         tbody.innerHTML = "";
-        if(results.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="p-10 text-red-500 font-bold">لا توجد بيانات مطابقة</td></tr>';
+        if(lastResults.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="p-10 text-red-500 font-bold text-center">لا توجد بيانات مطابقة</td></tr>';
         } else {
-            results.forEach(r => {
+            lastResults.forEach(r => {
                 tbody.innerHTML += `
                     <tr class="border-b hover:bg-gray-50">
-                        <td class="p-3 border">${r.date}</td>
-                        <td class="p-3 border font-bold">${r.bName}</td>
-                        <td class="p-3 border"><span class="px-2 py-1 rounded text-xs text-white ${r.type === 'فيزا' ? 'bg-blue-500' : 'bg-purple-500'}">${r.type}</span></td>
-                        <td class="p-3 border text-green-600 font-bold">${r.amt}</td>
-                        <td class="p-3 border font-mono">${r.id}</td>
-                        <td class="p-3 border text-right text-xs">${r.det}</td>
+                        <td class="p-3 border text-center">${r.date}</td>
+                        <td class="p-3 border font-bold text-slate-700 text-center">${r.bName}</td>
+                        <td class="p-3 border text-center"><span class="px-2 py-1 rounded text-[10px] text-white ${r.type === 'فيزا' ? 'bg-blue-500' : 'bg-purple-500'}">${r.type}</span></td>
+                        <td class="p-3 border text-green-600 font-bold text-center">${r.amt}</td>
+                        <td class="p-3 border font-mono text-xs text-center">${r.id}</td>
+                        <td class="p-3 border text-right text-[11px] text-slate-600">${r.det}</td>
                     </tr>`;
             });
         }
     });
+}
+
+// 4. دالة تصدير الإكسيل (تستخدم المكتبة التي أضفناها في الأعلى)
+function exportStatementExcel() {
+    if(lastResults.length === 0) return alert("يرجى عرض البيانات أولاً قبل التصدير");
+    
+    // تحويل البيانات لتنسيق إكسيل
+    const ws = XLSX.utils.json_to_sheet(lastResults.map(r => ({
+        "التاريخ": r.date,
+        "الفرع": r.bName,
+        "النوع": r.type,
+        "المبلغ": r.amt,
+        "الرقم / الباتش": r.id,
+        "التفاصيل": r.det
+    })));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "كشف الحساب");
+    
+    // تحميل الملف
+    XLSX.writeFile(wb, `كشف_حساب_التحويلات_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+    
 }
     
     
