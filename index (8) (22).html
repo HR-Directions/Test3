@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام جرد وتوزيع الفروع الذكي</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Cairo', sans-serif; background-color: #f4f7f6; }
+        .upload-card { transition: all 0.3s ease; border: 2px dashed #cbd5e1; }
+        .upload-card:hover { border-color: #10b981; background-color: #f0fdf4; }
+        .file-input { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; top: 0; left: 0; }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <div class="max-w-5xl mx-auto bg-white shadow-2xl rounded-3xl overflow-hidden">
+        <!-- Header -->
+        <div class="bg-slate-800 p-8 text-center">
+            <h1 class="text-3xl font-bold text-white mb-2">موزع المخزون ومعالج النواقص</h1>
+            <p class="text-slate-400">نظام ذكي لتوزيع الطلبات على الفروع (أرقام صحيحة فقط) وتحديد مشتريات الشركة</p>
+        </div>
+
+        <div class="p-6 md:p-10">
+            <!-- Alert Section -->
+            <div class="mb-8 bg-amber-50 border-r-4 border-amber-500 p-4 rounded-xl">
+                <div class="flex items-center">
+                    <svg class="w-6 h-6 text-amber-600 ml-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <span class="font-bold text-amber-800 text-lg">تنبيه هام حول معالجة البيانات:</span>
+                </div>
+                <ul class="list-disc list-inside mt-2 text-amber-700 space-y-1 mr-8">
+                    <li>أي رصيد فرع يحتوي على <strong>كسور عشرية</strong> سيتم تجاهله تماماً وطلبه من الشركة.</li>
+                    <li>يتم البحث عن <strong>اسم الصنف</strong> في الملفين لضمان عدم ظهور خانات فارغة.</li>
+                    <li>التقرير النهائي مرتب لسحب الكميات من الفروع أولاً ثم الشركة للمتبقي.</li>
+                </ul>
+            </div>
+
+            <!-- Upload Areas -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                <div class="upload-card relative p-10 rounded-2xl text-center">
+                    <input type="file" id="file-stock" class="file-input" accept=".xlsx, .xls" onchange="updateLabel('file-stock', 'lbl-stock')">
+                    <div class="text-slate-400 mb-4">
+                        <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    </div>
+                    <h3 class="font-bold text-slate-700 text-xl mb-1">ملف أرصدة الفروع</h3>
+                    <p id="lbl-stock" class="text-sm text-slate-500 italic">اسحب الملف هنا أو انقر للاختيار</p>
+                </div>
+
+                <div class="upload-card relative p-10 rounded-2xl text-center">
+                    <input type="file" id="file-order" class="file-input" accept=".xlsx, .xls" onchange="updateLabel('file-order', 'lbl-order')">
+                    <div class="text-slate-400 mb-4">
+                        <svg class="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    </div>
+                    <h3 class="font-bold text-slate-700 text-xl mb-1">ملف طلب الشراء</h3>
+                    <p id="lbl-order" class="text-sm text-slate-500 italic">اسحب الملف هنا أو انقر للاختيار</p>
+                </div>
+            </div>
+
+            <div id="msg-box" class="hidden mb-6 p-4 rounded-2xl text-center font-bold animate-pulse"></div>
+
+            <button onclick="startProcessing()" id="btn-main" class="w-full bg-slate-800 hover:bg-black text-white text-xl font-bold py-5 rounded-2xl shadow-xl transition-all flex items-center justify-center">
+                <span>إنشاء تقرير التوزيع (الأرقام الصحيحة)</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function updateLabel(id, lbl) {
+            const file = document.getElementById(id).files[0];
+            if (file) {
+                document.getElementById(lbl).innerText = "تم اختيار: " + file.name;
+                document.getElementById(lbl).className = "text-sm text-emerald-600 font-bold";
+            }
+        }
+
+        function showStatus(text, error = false) {
+            const box = document.getElementById('msg-box');
+            box.innerText = text;
+            box.className = `mb-6 p-4 rounded-2xl text-center font-bold ${error ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'} block`;
+        }
+
+        async function parseExcel(file) {
+            const buffer = await file.arrayBuffer();
+            const wb = XLSX.read(buffer);
+            return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+        }
+
+        function findKey(row, aliases) {
+            const keys = Object.keys(row);
+            for (let a of aliases) {
+                const match = keys.find(k => k.toString().replace(/\s/g, '').includes(a.replace(/\s/g, '')));
+                if (match) return match;
+            }
+            return null;
+        }
+
+        async function startProcessing() {
+            const fStock = document.getElementById('file-stock').files[0];
+            const fOrder = document.getElementById('file-order').files[0];
+
+            if (!fStock || !fOrder) return showStatus("يرجى التأكد من رفع الملفين!", true);
+
+            try {
+                showStatus("جاري تحليل البيانات واستبعاد الكسور...");
+                const stockData = await parseExcel(fStock);
+                const orderData = await parseExcel(fOrder);
+
+                // قاموس للأسماء لضمان عدم ضياعها
+                const namesDictionary = new Map();
+
+                // 1. بناء قاعدة بيانات الأرصدة (فقط الأرقام الصحيحة)
+                const stockRegistry = new Map();
+                stockData.forEach(row => {
+                    const cKey = findKey(row, ['كود', 'الكود', 'code', 'PartNumber']);
+                    const qKey = findKey(row, ['الرصيد', 'رصيد', 'الكمية', 'qty', 'balance']);
+                    const bKey = findKey(row, ['الفرع', 'فرع', 'branch', 'store']);
+                    const nKey = findKey(row, ['اسم', 'الاسم', 'صنف', 'name', 'desc']);
+
+                    if (cKey) {
+                        const code = String(row[cKey]).trim();
+                        const val = row[qKey];
+                        const branch = String(row[bKey] || "غير معروف").trim();
+                        
+                        // حفظ الاسم في القاموس إذا وجد
+                        if (nKey && row[nKey]) namesDictionary.set(code, String(row[nKey]).trim());
+
+                        // فحص الكسور: نعتبره رقم صحيح إذا كان حاصل قسمته على 1 يساوي صفر
+                        if (val !== "" && Number(val) % 1 === 0 && Number(val) > 0) {
+                            if (!stockRegistry.has(code)) stockRegistry.set(code, []);
+                            stockRegistry.get(code).push({ branch, qty: parseInt(val) });
+                        }
+                    }
+                });
+
+                const finalReport = [];
+
+                // 2. معالجة طلبات الشراء
+                orderData.forEach(row => {
+                    const cKey = findKey(row, ['كود', 'الكود', 'code']);
+                    const nKey = findKey(row, ['اسم', 'الاسم', 'صنف', 'name']);
+                    const qKey = findKey(row, ['مطلوب', 'الكمية المطلوبة', 'الكمية', 'qty']);
+
+                    if (cKey) {
+                        const code = String(row[cKey]).trim();
+                        let reqQty = Math.ceil(parseFloat(row[qKey]) || 0); // تقريب الطلب لأعلى رقم صحيح
+                        
+                        // محاولة جلب الاسم من ملف الطلب أو قاموس أرصدة الفروع
+                        let itemName = nKey && row[nKey] ? String(row[nKey]).trim() : (namesDictionary.get(code) || "صنف غير مسمى");
+                        const initialNeeded = reqQty;
+
+                        if (reqQty <= 0) return;
+
+                        const availableInBranches = stockRegistry.get(code) || [];
+                        
+                        // توزيع الطلب على الفروع
+                        availableInBranches.forEach(b => {
+                            if (reqQty > 0) {
+                                const take = Math.min(reqQty, b.qty);
+                                if (take > 0) {
+                                    finalReport.push({
+                                        "كود الصنف": code,
+                                        "اسم الصنف": itemName,
+                                        "الطلب الأصلي": initialNeeded,
+                                        "جهة التوريد": b.branch,
+                                        "الكمية المطلوبة": take,
+                                        "نوع العملية": "سحب من فرع"
+                                    });
+                                    reqQty -= take;
+                                }
+                            }
+                        });
+
+                        // المتبقي يطلب من الشركة
+                        if (reqQty > 0) {
+                            finalReport.push({
+                                "كود الصنف": code,
+                                "اسم الصنف": itemName,
+                                "الطلب الأصلي": initialNeeded,
+                                "جهة التوريد": "الشركة الموردة",
+                                "الكمية المطلوبة": reqQty,
+                                "نوع العملية": "شراء نواقص"
+                            });
+                        }
+                    }
+                });
+
+                if (finalReport.length === 0) throw new Error("لم يتم العثور على بيانات متطابقة للمعالجة.");
+
+                // 3. تصدير الملف
+                const ws = XLSX.utils.json_to_sheet(finalReport);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "خطة التوزيع");
+                
+                ws['!cols'] = [{wch:15}, {wch:40}, {wch:15}, {wch:25}, {wch:15}, {wch:20}];
+                XLSX.writeFile(wb, "تقرير_توزيع_المهام_والنواقص.xlsx");
+                
+                showStatus("تم المعالجة بنجاح! تم استبعاد أي أرصدة تحتوي على كسور وضمان ظهور أسماء الأصناف.");
+
+            } catch (err) {
+                console.error(err);
+                showStatus(err.message, true);
+            }
+        }
+    </script>
+</body>
+</html>
+
