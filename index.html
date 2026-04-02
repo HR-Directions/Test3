@@ -3,87 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>نظام الرقابة المطور - تقارير ذكية</title>
+    <title>نظام الرقابة الاحترافي - الإصدار النهائي</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; }
-        .hidden-filter { display: none; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
-        @media print { .no-print { display: none; } }
+        body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; }
+        .no-print { transition: all 0.2s; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; padding: 20px; }
+        .capture-area { background: #fff; padding: 20px; border-radius: 10px; }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-2 md:p-6">
 
-    <div id="detailsModal" class="modal" onclick="closeModal()">
-        <div class="bg-white p-6 rounded-3xl w-11/12 max-w-2xl shadow-2xl" onclick="event.stopPropagation()">
-            <div class="flex justify-between items-center mb-4 border-b pb-2">
-                <h3 class="text-xl font-bold">تفاصيل عمليات الباتش</h3>
-                <button onclick="closeModal()" class="text-red-500 font-bold">X</button>
+    <div id="visaModal" class="modal" onclick="this.style.display='none'">
+        <div class="bg-white w-full max-w-lg rounded-2xl overflow-hidden shadow-2xl" onclick="event.stopPropagation()">
+            <div class="bg-indigo-600 p-4 text-white flex justify-between">
+                <span class="font-bold">تفاصيل عمليات الباتش</span>
+                <button onclick="document.getElementById('visaModal').style.display='none'">✕</button>
             </div>
-            <div id="modalContent" class="max-h-96 overflow-y-auto"></div>
+            <div id="modalBody" class="p-4 max-h-[70vh] overflow-y-auto"></div>
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+    <div id="mainReportArea" class="max-w-6xl mx-auto bg-white p-4 md:p-8 rounded-3xl shadow-xl border border-slate-200">
+        
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
             <div>
-                <h1 class="text-3xl font-black text-slate-800">📊 الرقابة: تقارير مدمجة</h1>
-                <p class="text-indigo-600 font-bold text-sm">دمج الباتشات | تصدير PDF | إرسال واتساب</p>
+                <h1 class="text-3xl font-black text-slate-800">📊 كشف الحساب الموحد</h1>
+                <p class="text-indigo-600 font-bold">نظام الرقابة والتدقيق المالي الذكي</p>
             </div>
-            <div class="flex flex-wrap gap-2 mt-4 md:mt-0">
-                <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all">📥 Excel</button>
-                <button onclick="exportToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all">📄 PDF</button>
-                <button onclick="sendWhatsApp()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-1">🟢 WhatsApp</button>
+            
+            <div class="flex flex-wrap gap-2 no-print">
+                <button onclick="exportToPDF()" class="bg-red-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg">
+                    📄 PDF
+                </button>
+                <button onclick="sendAsImage()" class="bg-green-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-lg">
+                    🟢 واتساب (صورة)
+                </button>
+                <button onclick="exportToExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg">
+                    📥 Excel
+                </button>
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8 no-print">
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div>
-                    <label class="block text-xs font-black text-slate-400 mb-1">نوع المعاملة</label>
-                    <select id="typeFilter" onchange="updateDynamicFilters()" class="w-full p-3 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-500">
-                        <option value="all">كل الأنواع</option>
-                        <option value="insta">انستا باي</option>
-                        <option value="wallet">المحافظ</option>
-                        <option value="visa">الفيزا (الباتشات)</option>
-                    </select>
-                </div>
-                <div id="subFilterWrapper" class="hidden-filter">
-                    <label id="subLabel" class="block text-xs font-black text-indigo-500 mb-1 italic">تحديد الحساب</label>
-                    <select id="subSelect" class="w-full p-3 bg-indigo-50 border rounded-2xl font-bold outline-none focus:border-indigo-500"></select>
-                </div>
-                <div>
-                    <label class="block text-xs font-black text-slate-400 mb-1">الفرع</label>
-                    <select id="branchFilter" class="w-full p-3 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-500">
-                        <option value="all">كل الفروع</option>
-                    </select>
-                </div>
-                <div><label class="block text-xs font-black text-slate-400 mb-1">من</label><input type="date" id="dateFrom" class="w-full p-2.5 bg-slate-50 border rounded-2xl"></div>
-                <div><label class="block text-xs font-black text-slate-400 mb-1">إلى</label><input type="date" id="dateTo" class="w-full p-2.5 bg-slate-50 border rounded-2xl"></div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100 no-print">
+            <div>
+                <label class="block text-xs font-black text-slate-500 mb-2">نوع العملية</label>
+                <select id="typeFilter" onchange="loadSubOptions()" class="w-full p-3 rounded-xl border-none ring-2 ring-slate-200 focus:ring-indigo-500 font-bold">
+                    <option value="all">الكل</option>
+                    <option value="insta">انستا باي</option>
+                    <option value="wallet">محافظ</option>
+                    <option value="visa">فيزا (دمج الباتشات)</option>
+                </select>
             </div>
-            <button onclick="processData()" class="w-full mt-4 bg-slate-900 text-white font-black py-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg">تحديث وعرض البيانات</button>
+            <div id="subFilterBox" class="hidden">
+                <label id="subLabel" class="block text-xs font-black text-indigo-500 mb-2 italic">الحساب / الرقم</label>
+                <select id="subSelect" class="w-full p-3 rounded-xl ring-2 ring-indigo-200 font-bold"></select>
+            </div>
+            <div>
+                <label class="block text-xs font-black text-slate-500 mb-2">من تاريخ</label>
+                <input type="date" id="dateFrom" class="w-full p-2.5 rounded-xl ring-2 ring-slate-200">
+            </div>
+            <div>
+                <label class="block text-xs font-black text-slate-500 mb-2">إلى تاريخ</label>
+                <input type="date" id="dateTo" class="w-full p-2.5 rounded-xl ring-2 ring-slate-200">
+            </div>
+            <div class="md:col-span-4 mt-2">
+                <button onclick="fetchAndProcess()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-xl hover:bg-indigo-700 transition-all">تحديث السجلات والبيانات</button>
+            </div>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
-            <table class="w-full text-center border-collapse min-w-[800px]">
-                <thead>
-                    <tr class="bg-slate-50 text-slate-500 text-xs font-black uppercase">
-                        <th class="p-4 border-b">التاريخ</th>
-                        <th class="p-4 border-b">الفرع</th>
-                        <th class="p-4 border-b">النوع</th>
-                        <th class="p-4 border-b">إجمالي المبلغ</th>
-                        <th class="p-4 border-b">الحساب / الباتش</th>
-                        <th class="p-4 border-b">البيان</th>
-                        <th class="p-4 border-b no-print">التفاصيل</th>
+        <div class="overflow-x-auto rounded-xl border border-slate-100">
+            <table id="reportTable" class="w-full text-center">
+                <thead class="bg-slate-800 text-white text-xs">
+                    <tr>
+                        <th class="p-4 border-l border-slate-700">التاريخ</th>
+                        <th class="p-4 border-l border-slate-700">الفرع</th>
+                        <th class="p-4 border-l border-slate-700">النوع</th>
+                        <th class="p-4 border-l border-slate-700 text-lg">المبلغ</th>
+                        <th class="p-4 border-l border-slate-700">المرجع (الاسم | الرقم)</th>
+                        <th class="p-4 border-l border-slate-700">البيان</th>
+                        <th class="p-4 no-print">تفاصيل</th>
                     </tr>
                 </thead>
-                <tbody id="resultsBody" class="text-slate-700 font-bold text-sm">
-                    <tr><td colspan="7" class="p-16 text-slate-300 italic">اضغط تحديث لجلب السجلات...</td></tr>
+                <tbody id="tableBody" class="text-sm font-bold text-slate-700">
+                    <tr><td colspan="7" class="p-20 text-slate-300 italic">بانتظار طلب البيانات...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -97,167 +106,135 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let finalReport = [];
-        let visaDetailsDB = {}; 
+        let currentData = [];
+        let visaDetails = {};
 
-        window.onload = () => {
-            db.ref("branches").once("value").then(s => {
-                const bSelect = document.getElementById('branchFilter');
-                s.forEach(c => { bSelect.innerHTML += `<option value="${c.key}">${c.val().name}</option>`; });
-            });
-        };
-
-        function updateDynamicFilters() {
+        // وظيفة الفلتر الفرعي
+        async function loadSubOptions() {
             const type = document.getElementById('typeFilter').value;
-            const wrapper = document.getElementById('subFilterWrapper');
-            const subSelect = document.getElementById('subSelect');
-            if (type === 'insta' || type === 'wallet') {
-                wrapper.classList.remove('hidden-filter');
-                db.ref("treasury").limitToLast(100).once("value").then(snap => {
-                    let items = new Set();
-                    snap.forEach(day => {
-                        if(day.val()[type]) {
-                            day.val()[type].forEach(entry => {
-                                // هنا نجمع الاسم والرقم معاً
-                                let label = type === 'insta' ? `${entry.name || 'مجهول'} (${entry.mobile || '---'})` : entry.mobile;
-                                if(label) items.add(label);
-                            });
-                        }
-                    });
-                    subSelect.innerHTML = '<option value="all">الكل</option>';
-                    items.forEach(i => subSelect.innerHTML += `<option value="${i}">${i}</option>`);
-                });
-            } else { wrapper.classList.add('hidden-filter'); }
+            const box = document.getElementById('subFilterBox');
+            const select = document.getElementById('subSelect');
+            
+            if (type === 'all' || type === 'visa') { box.classList.add('hidden'); return; }
+            box.classList.remove('hidden');
+            
+            const snap = await db.ref("treasury").limitToLast(50).once("value");
+            let set = new Set();
+            snap.forEach(d => {
+                if(d.val()[type]) d.val()[type].forEach(i => set.add(type === 'insta' ? `${i.name} | ${i.mobile}` : i.mobile));
+            });
+            select.innerHTML = '<option value="all">الكل</option>';
+            set.forEach(val => select.innerHTML += `<option value="${val}">${val}</option>`);
         }
 
-        function processData() {
+        // معالجة البيانات
+        async function fetchAndProcess() {
             const type = document.getElementById('typeFilter').value;
-            const subVal = document.getElementById('subSelect').value;
-            const branch = document.getElementById('branchFilter').value;
+            const sub = document.getElementById('subSelect').value;
             const from = document.getElementById('dateFrom').value;
             const to = document.getElementById('dateTo').value;
-            const tbody = document.getElementById('resultsBody');
+            
+            document.getElementById('tableBody').innerHTML = '<tr><td colspan="7" class="p-20 animate-pulse text-indigo-600 font-black">جاري التحقق والدمج...</td></tr>';
 
-            tbody.innerHTML = '<tr><td colspan="7" class="p-20 animate-pulse text-indigo-600 font-black italic">جاري التدقيق وجمع الباتشات...</td></tr>';
+            const snap = await db.ref("treasury").once("value");
+            currentData = [];
+            visaDetails = {};
+            let visaGroups = {};
 
-            db.ref("treasury").once("value").then(snapshot => {
-                finalReport = [];
-                let visaBatches = {};
-                visaDetailsDB = {};
+            snap.forEach(daySnap => {
+                const day = daySnap.val();
+                if((from && day.date < from) || (to && day.date > to)) return;
 
-                snapshot.forEach(snap => {
-                    const day = snap.val();
-                    if((from && day.date < from) || (to && day.date > to)) return;
-                    if(branch !== "all" && day.branchKey !== branch) return;
-
-                    // معالجة انستا ومحافظ (تعديل لعرض الاسم والرقم)
-                    ['insta', 'wallet'].forEach(k => {
-                        if((type === 'all' || type === k) && day[k]) {
-                            day[k].forEach(item => {
-                                let fullName = `${item.name || '---'} (${item.mobile || '---'})`;
-                                let shortName = k === 'insta' ? fullName : item.mobile;
-                                if(type !== 'all' && subVal !== 'all' && shortName !== subVal) return;
-
-                                finalReport.push({
-                                    date: day.date, bName: day.branchName, 
-                                    type: k === 'insta' ? 'انستا' : 'محفظة',
-                                    amt: parseFloat(item.amount), ref: shortName, desc: "عملية فردية", isVisa: false
-                                });
-                            });
-                        }
-                    });
-
-                    // دمج الفيزا وتخزين التفاصيل
-                    if((type === 'all' || type === 'visa') && day.visa) {
-                        day.visa.forEach(v => {
-                            let batchID = v.batch;
-                            let key = `${day.date}_${day.branchKey}_${batchID}`;
-                            if(!visaBatches[key]) {
-                                visaBatches[key] = { date: day.date, bName: day.branchName, type: 'فيزا', amt: 0, ref: batchID, count: 0, isVisa: true };
-                                visaDetailsDB[key] = [];
-                            }
-                            visaBatches[key].amt += parseFloat(v.amount);
-                            visaBatches[key].count += (parseInt(v.count) || 1);
-                            visaDetailsDB[key].push(v);
+                ['insta', 'wallet'].forEach(k => {
+                    if((type === 'all' || type === k) && day[k]) {
+                        day[k].forEach(item => {
+                            let identity = k === 'insta' ? `${item.name} | ${item.mobile}` : item.mobile;
+                            if(type !== 'all' && sub !== 'all' && identity !== sub) return;
+                            currentData.push({ date: day.date, branch: day.branchName, type: k==='insta'?'انستا':'محفظة', amt: parseFloat(item.amount), ref: identity, desc: "عملية فردية", isVisa: false });
                         });
                     }
                 });
 
-                Object.keys(visaBatches).forEach(k => {
-                    let b = visaBatches[k];
-                    finalReport.push({ ...b, batchKey: k, desc: `إجمالي ${b.count} عمليات` });
-                });
-
-                renderTable();
+                if((type === 'all' || type === 'visa') && day.visa) {
+                    day.visa.forEach(v => {
+                        let key = `${day.date}_${day.branchKey}_${v.batch}`;
+                        if(!visaGroups[key]) {
+                            visaGroups[key] = { date: day.date, branch: day.branchName, type: 'فيزا', amt: 0, ref: `Batch: ${v.batch}`, count: 0, isVisa: true, key: key };
+                            visaDetails[key] = [];
+                        }
+                        visaGroups[key].amt += parseFloat(v.amount);
+                        visaGroups[key].count += (parseInt(v.count) || 1);
+                        visaDetails[key].push(v);
+                    });
+                }
             });
+
+            Object.values(visaGroups).forEach(g => currentData.push({...g, desc: `دمج ${g.count} عمليات`}));
+            render();
         }
 
-        function renderTable() {
-            const tbody = document.getElementById('resultsBody');
-            finalReport.sort((a,b) => new Date(b.date) - new Date(a.date));
-            tbody.innerHTML = "";
+        function render() {
+            const tbody = document.getElementById('tableBody');
+            currentData.sort((a,b) => new Date(b.date) - new Date(a.date));
+            tbody.innerHTML = currentData.length === 0 ? '<tr><td colspan="7" class="p-10 text-red-500">لا توجد بيانات</td></tr>' : "";
             
-            finalReport.forEach((r, idx) => {
+            currentData.forEach(r => {
                 tbody.innerHTML += `
-                    <tr class="border-b border-slate-50 hover:bg-slate-50 transition-all">
-                        <td class="p-4 text-slate-400 text-xs">${r.date}</td>
-                        <td class="p-4 font-black">${r.bName}</td>
-                        <td class="p-4"><span class="px-2 py-0.5 rounded-lg text-[9px] text-white ${r.type==='فيزا'?'bg-blue-600':r.type==='انستا'?'bg-purple-600':'bg-amber-600'}">${r.type}</span></td>
-                        <td class="p-4 text-emerald-600 font-black">${r.amt.toLocaleString()}</td>
-                        <td class="p-4 font-mono text-[11px] text-slate-500">${r.ref}</td>
-                        <td class="p-4 text-right text-xs text-slate-400 font-bold">${r.desc}</td>
-                        <td class="p-4 no-print">
-                            ${r.isVisa ? `<button onclick="showVisaDetails('${r.batchKey}')" class="bg-indigo-100 text-indigo-600 p-1 rounded-lg hover:bg-indigo-600 hover:text-white transition-all text-xs">👁️ تفاصيل</button>` : '---'}
-                        </td>
+                    <tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="p-4 text-xs text-slate-400">${r.date}</td>
+                        <td class="p-4">${r.branch}</td>
+                        <td class="p-4"><span class="px-2 py-1 rounded text-[10px] text-white ${r.type==='فيزا'?'bg-blue-600':'bg-purple-600'}">${r.type}</span></td>
+                        <td class="p-4 text-emerald-600 text-lg font-black">${r.amt.toLocaleString()}</td>
+                        <td class="p-4 font-mono text-xs text-slate-500">${r.ref}</td>
+                        <td class="p-4 text-xs text-slate-400">${r.desc}</td>
+                        <td class="p-4 no-print">${r.isVisa ? `<button onclick="showDetails('${r.key}')" class="text-indigo-600 underline">👁️</button>` : '-'}</td>
                     </tr>`;
             });
         }
 
-        function showVisaDetails(key) {
-            const modal = document.getElementById('detailsModal');
-            const content = document.getElementById('modalContent');
-            let data = visaDetailsDB[key];
-            let html = `<table class="w-full text-sm text-center">
-                        <thead class="bg-slate-100 italic font-bold"><tr><th class="p-2">المبلغ</th><th class="p-2">العدد</th><th class="p-2">تفاصيل إضافية</th></tr></thead><tbody>`;
-            data.forEach(d => {
-                html += `<tr class="border-b"><td class="p-2 text-emerald-600 font-bold">${d.amount}</td><td class="p-2">${d.count || 1}</td><td class="p-2 text-xs text-slate-500">${d.calcDetails || 'لا يوجد'}</td></tr>`;
-            });
-            html += `</tbody></table>`;
-            content.innerHTML = html;
-            modal.style.display = 'flex';
+        function showDetails(key) {
+            let html = '<table class="w-full text-center border"><thead><tr class="bg-slate-100 italic"><th>المبلغ</th><th>التفاصيل</th></tr></thead><tbody>';
+            visaDetails[key].forEach(d => html += `<tr class="border-b"><td>${d.amount}</td><td class="text-xs">${d.calcDetails || '-'}</td></tr>`);
+            document.getElementById('modalBody').innerHTML = html + '</tbody></table>';
+            document.getElementById('visaModal').style.display = 'flex';
         }
 
-        function closeModal() { document.getElementById('detailsModal').style.display = 'none'; }
-
-        function exportToPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a4');
-            doc.addFont('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf', 'Roboto', 'normal');
-            doc.setFont('Roboto');
+        // تصدير PDF احترافي يدعم العربية
+        async function exportToPDF() {
+            const btn = document.querySelectorAll('.no-print');
+            btn.forEach(b => b.style.display = 'none');
             
-            doc.text("Report: Financial Audit", 10, 10);
-            doc.autoTable({
-                head: [['Date', 'Branch', 'Type', 'Amount', 'Ref', 'Details']],
-                body: finalReport.map(r => [r.date, r.bName, r.type, r.amt, r.ref, r.desc]),
-                startY: 20,
-                styles: { fontSize: 8 }
-            });
-            doc.save("Audit_Report.pdf");
+            const canvas = await html2canvas(document.getElementById('mainReportArea'), { scale: 2 });
+            const imgData = canvas.toDataURL('image/png');
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const width = pdf.internal.pageSize.getWidth();
+            const height = (canvas.height * width) / canvas.width;
+            
+            pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+            pdf.save("تقرير_الرقابة.pdf");
+            btn.forEach(b => b.style.display = 'flex');
         }
 
-        function sendWhatsApp() {
-            let text = "📋 *ملخص تقرير الرقابة اليومي* \n\n";
-            finalReport.slice(0, 10).forEach(r => {
-                text += `📅 ${r.date} | 🏥 ${r.bName} \n 💰 ${r.amt} (${r.type}) \n 🔢 ${r.ref} \n ------------------ \n`;
+        // إرسال صورة للواتساب (تحويل ونسخ)
+        async function sendAsImage() {
+            const btn = document.querySelectorAll('.no-print');
+            btn.forEach(b => b.style.display = 'none');
+            
+            const canvas = await html2canvas(document.getElementById('mainReportArea'), { scale: 2 });
+            canvas.toBlob(async (blob) => {
+                const item = new ClipboardItem({ "image/png": blob });
+                await navigator.clipboard.write([item]);
+                alert("✅ تم تحويل التقرير لصورة ونسخها بنجاح!\nافتح الواتساب الآن وقم بعمل 'Paste' (لصق) للصورة.");
+                window.open("https://web.whatsapp.com/", "_blank");
+                btn.forEach(b => b.style.display = 'flex');
             });
-            let url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-            window.open(url, '_blank');
         }
 
         function exportToExcel() {
-            const ws = XLSX.utils.json_to_sheet(finalReport.map(r => ({ "التاريخ": r.date, "الفرع": r.bName, "النوع": r.type, "المبلغ": r.amt, "المرجع": r.ref, "البيان": r.desc })));
+            const ws = XLSX.utils.json_to_sheet(currentData);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Statement");
+            XLSX.utils.book_append_sheet(wb, ws, "Report");
             XLSX.writeFile(wb, "Report.xlsx");
         }
     </script>
