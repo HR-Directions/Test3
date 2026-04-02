@@ -3,87 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>كشف الحساب المطور - نظام الرقابة الذكي</title>
+    <title>نظام الرقابة المطور - تقارير ذكية</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Cairo', sans-serif; background-color: #f8fafc; }
         .hidden-filter { display: none; }
-        .batch-badge { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; justify-content: center; align-items: center; }
+        @media print { .no-print { display: none; } }
     </style>
 </head>
 <body class="p-4 md:p-8">
 
+    <div id="detailsModal" class="modal" onclick="closeModal()">
+        <div class="bg-white p-6 rounded-3xl w-11/12 max-w-2xl shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 class="text-xl font-bold">تفاصيل عمليات الباتش</h3>
+                <button onclick="closeModal()" class="text-red-500 font-bold">X</button>
+            </div>
+            <div id="modalContent" class="max-h-96 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <div class="max-w-7xl mx-auto">
         <div class="flex flex-col md:flex-row justify-between items-center mb-8 bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
             <div>
-                <h1 class="text-3xl font-black text-slate-800">📊 كشف الحساب التحليلي</h1>
-                <p class="text-indigo-600 font-bold text-sm">دمج تلقائي للباتشات وتفصيل الحسابات</p>
+                <h1 class="text-3xl font-black text-slate-800">📊 الرقابة: تقارير مدمجة</h1>
+                <p class="text-indigo-600 font-bold text-sm">دمج الباتشات | تصدير PDF | إرسال واتساب</p>
             </div>
-            <div class="flex gap-3">
-                <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg transition-all flex items-center gap-2">
-                    📥 تصدير التقرير
-                </button>
+            <div class="flex flex-wrap gap-2 mt-4 md:mt-0">
+                <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all">📥 Excel</button>
+                <button onclick="exportToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all">📄 PDF</button>
+                <button onclick="sendWhatsApp()" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-1">🟢 WhatsApp</button>
             </div>
         </div>
 
-        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8">
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
+        <div class="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 mb-8 no-print">
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                 <div>
-                    <label class="block text-xs font-black text-slate-400 mb-2 mr-1">نوع المعاملة</label>
-                    <select id="typeFilter" onchange="updateDynamicFilters()" class="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-500">
+                    <label class="block text-xs font-black text-slate-400 mb-1">نوع المعاملة</label>
+                    <select id="typeFilter" onchange="updateDynamicFilters()" class="w-full p-3 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-500">
                         <option value="all">كل الأنواع</option>
                         <option value="insta">انستا باي</option>
                         <option value="wallet">المحافظ</option>
-                        <option value="visa">الفيزا (دمج الباتشات)</option>
+                        <option value="visa">الفيزا (الباتشات)</option>
                     </select>
                 </div>
-
                 <div id="subFilterWrapper" class="hidden-filter">
-                    <label id="subLabel" class="block text-xs font-black text-indigo-500 mb-2 mr-1">تحديد الحساب</label>
-                    <select id="subSelect" class="w-full p-3.5 bg-indigo-50 border-2 border-indigo-200 rounded-2xl font-bold outline-none">
-                        <option value="all">تحميل...</option>
-                    </select>
+                    <label id="subLabel" class="block text-xs font-black text-indigo-500 mb-1 italic">تحديد الحساب</label>
+                    <select id="subSelect" class="w-full p-3 bg-indigo-50 border rounded-2xl font-bold outline-none focus:border-indigo-500"></select>
                 </div>
-
                 <div>
-                    <label class="block text-xs font-black text-slate-400 mb-2 mr-1">الفرع</label>
-                    <select id="branchFilter" class="w-full p-3.5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none">
+                    <label class="block text-xs font-black text-slate-400 mb-1">الفرع</label>
+                    <select id="branchFilter" class="w-full p-3 bg-slate-50 border rounded-2xl font-bold outline-none focus:border-indigo-500">
                         <option value="all">كل الفروع</option>
                     </select>
                 </div>
-
-                <div>
-                    <label class="block text-xs font-black text-slate-400 mb-2 mr-1">من تاريخ</label>
-                    <input type="date" id="dateFrom" class="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none">
-                </div>
-
-                <div>
-                    <label class="block text-xs font-black text-slate-400 mb-2 mr-1">إلى تاريخ</label>
-                    <input type="date" id="dateTo" class="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none">
-                </div>
+                <div><label class="block text-xs font-black text-slate-400 mb-1">من</label><input type="date" id="dateFrom" class="w-full p-2.5 bg-slate-50 border rounded-2xl"></div>
+                <div><label class="block text-xs font-black text-slate-400 mb-1">إلى</label><input type="date" id="dateTo" class="w-full p-2.5 bg-slate-50 border rounded-2xl"></div>
             </div>
-
-            <button onclick="processData()" class="w-full mt-6 bg-slate-900 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl transition-all shadow-xl">
-                🔎 تـحـديـث الـبـيـانـات
-            </button>
+            <button onclick="processData()" class="w-full mt-4 bg-slate-900 text-white font-black py-3 rounded-2xl hover:bg-indigo-700 transition-all shadow-lg">تحديث وعرض البيانات</button>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
-            <table class="w-full text-center border-collapse">
+        <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden overflow-x-auto">
+            <table class="w-full text-center border-collapse min-w-[800px]">
                 <thead>
-                    <tr class="bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-widest">
-                        <th class="p-5 border-b">التاريخ</th>
-                        <th class="p-5 border-b">الفرع</th>
-                        <th class="p-5 border-b">النوع</th>
-                        <th class="p-5 border-b">المبلغ الإجمالي</th>
-                        <th class="p-5 border-b">الرقم / الباتش</th>
-                        <th class="p-5 border-b">عدد العمليات / البيان</th>
+                    <tr class="bg-slate-50 text-slate-500 text-xs font-black uppercase">
+                        <th class="p-4 border-b">التاريخ</th>
+                        <th class="p-4 border-b">الفرع</th>
+                        <th class="p-4 border-b">النوع</th>
+                        <th class="p-4 border-b">إجمالي المبلغ</th>
+                        <th class="p-4 border-b">الحساب / الباتش</th>
+                        <th class="p-4 border-b">البيان</th>
+                        <th class="p-4 border-b no-print">التفاصيل</th>
                     </tr>
                 </thead>
-                <tbody id="resultsBody" class="text-slate-700 font-bold">
-                    <tr><td colspan="6" class="p-20 text-slate-300">انتظار طلب البيانات...</td></tr>
+                <tbody id="resultsBody" class="text-slate-700 font-bold text-sm">
+                    <tr><td colspan="7" class="p-16 text-slate-300 italic">اضغط تحديث لجلب السجلات...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -98,6 +98,7 @@
         const db = firebase.database();
 
         let finalReport = [];
+        let visaDetailsDB = {}; 
 
         window.onload = () => {
             db.ref("branches").once("value").then(s => {
@@ -110,28 +111,23 @@
             const type = document.getElementById('typeFilter').value;
             const wrapper = document.getElementById('subFilterWrapper');
             const subSelect = document.getElementById('subSelect');
-            const label = document.getElementById('subLabel');
-
             if (type === 'insta' || type === 'wallet') {
                 wrapper.classList.remove('hidden-filter');
-                label.innerText = type === 'insta' ? 'الحساب المستهدف' : 'رقم المحفظة';
-                
                 db.ref("treasury").limitToLast(100).once("value").then(snap => {
                     let items = new Set();
                     snap.forEach(day => {
                         if(day.val()[type]) {
                             day.val()[type].forEach(entry => {
-                                let val = type === 'insta' ? (entry.name || entry.mobile) : entry.mobile;
-                                if(val) items.add(val);
+                                // هنا نجمع الاسم والرقم معاً
+                                let label = type === 'insta' ? `${entry.name || 'مجهول'} (${entry.mobile || '---'})` : entry.mobile;
+                                if(label) items.add(label);
                             });
                         }
                     });
                     subSelect.innerHTML = '<option value="all">الكل</option>';
                     items.forEach(i => subSelect.innerHTML += `<option value="${i}">${i}</option>`);
                 });
-            } else {
-                wrapper.classList.add('hidden-filter');
-            }
+            } else { wrapper.classList.add('hidden-filter'); }
         }
 
         function processData() {
@@ -142,55 +138,54 @@
             const to = document.getElementById('dateTo').value;
             const tbody = document.getElementById('resultsBody');
 
-            tbody.innerHTML = '<tr><td colspan="6" class="p-20 animate-pulse text-indigo-600 font-black">جاري المعالجة والدمج...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="p-20 animate-pulse text-indigo-600 font-black italic">جاري التدقيق وجمع الباتشات...</td></tr>';
 
             db.ref("treasury").once("value").then(snapshot => {
                 finalReport = [];
-                let visaBatches = {}; // لتجميع باتشات الفيزا
+                let visaBatches = {};
+                visaDetailsDB = {};
 
                 snapshot.forEach(snap => {
                     const day = snap.val();
                     if((from && day.date < from) || (to && day.date > to)) return;
                     if(branch !== "all" && day.branchKey !== branch) return;
 
-                    // معالجة انستا ومحافظ
+                    // معالجة انستا ومحافظ (تعديل لعرض الاسم والرقم)
                     ['insta', 'wallet'].forEach(k => {
                         if((type === 'all' || type === k) && day[k]) {
                             day[k].forEach(item => {
-                                let identity = k === 'insta' ? (item.name || item.mobile) : item.mobile;
-                                if(type !== 'all' && subVal !== 'all' && identity !== subVal) return;
+                                let fullName = `${item.name || '---'} (${item.mobile || '---'})`;
+                                let shortName = k === 'insta' ? fullName : item.mobile;
+                                if(type !== 'all' && subVal !== 'all' && shortName !== subVal) return;
 
                                 finalReport.push({
                                     date: day.date, bName: day.branchName, 
                                     type: k === 'insta' ? 'انستا' : 'محفظة',
-                                    amt: parseFloat(item.amount), ref: identity, desc: "عملية فردية"
+                                    amt: parseFloat(item.amount), ref: shortName, desc: "عملية فردية", isVisa: false
                                 });
                             });
                         }
                     });
 
-                    // معالجة الفيزا (دمج الباتشات)
+                    // دمج الفيزا وتخزين التفاصيل
                     if((type === 'all' || type === 'visa') && day.visa) {
                         day.visa.forEach(v => {
-                            let key = `${day.date}_${day.branchKey}_${v.batch}`;
+                            let batchID = v.batch;
+                            let key = `${day.date}_${day.branchKey}_${batchID}`;
                             if(!visaBatches[key]) {
-                                visaBatches[key] = {
-                                    date: day.date, bName: day.branchName, type: 'فيزا',
-                                    amt: 0, ref: v.batch, count: 0
-                                };
+                                visaBatches[key] = { date: day.date, bName: day.branchName, type: 'فيزا', amt: 0, ref: batchID, count: 0, isVisa: true };
+                                visaDetailsDB[key] = [];
                             }
                             visaBatches[key].amt += parseFloat(v.amount);
                             visaBatches[key].count += (parseInt(v.count) || 1);
+                            visaDetailsDB[key].push(v);
                         });
                     }
                 });
 
-                // تحويل الباتشات المدمجة إلى المصفوفة النهائية
-                Object.values(visaBatches).forEach(b => {
-                    finalReport.push({
-                        date: b.date, bName: b.bName, type: b.type,
-                        amt: b.amt, ref: `Batch: ${b.ref}`, desc: `إجمالي ${b.count} عمليات`
-                    });
+                Object.keys(visaBatches).forEach(k => {
+                    let b = visaBatches[k];
+                    finalReport.push({ ...b, batchKey: k, desc: `إجمالي ${b.count} عمليات` });
                 });
 
                 renderTable();
@@ -200,36 +195,70 @@
         function renderTable() {
             const tbody = document.getElementById('resultsBody');
             finalReport.sort((a,b) => new Date(b.date) - new Date(a.date));
-            
             tbody.innerHTML = "";
-            if(finalReport.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-20 text-red-500 font-black">لا توجد سجلات مطابقة</td></tr>';
-                return;
-            }
-
-            finalReport.forEach(r => {
+            
+            finalReport.forEach((r, idx) => {
                 tbody.innerHTML += `
-                    <tr class="border-b border-slate-100 hover:bg-slate-50 transition-all">
-                        <td class="p-5 font-bold text-slate-400">${r.date}</td>
-                        <td class="p-5 font-black text-slate-800">${r.bName}</td>
-                        <td class="p-5">
-                            <span class="px-3 py-1 rounded-lg text-[10px] text-white ${r.type==='فيزا'?'bg-blue-600':r.type==='انستا'?'bg-purple-600':'bg-amber-600'}">${r.type}</span>
+                    <tr class="border-b border-slate-50 hover:bg-slate-50 transition-all">
+                        <td class="p-4 text-slate-400 text-xs">${r.date}</td>
+                        <td class="p-4 font-black">${r.bName}</td>
+                        <td class="p-4"><span class="px-2 py-0.5 rounded-lg text-[9px] text-white ${r.type==='فيزا'?'bg-blue-600':r.type==='انستا'?'bg-purple-600':'bg-amber-600'}">${r.type}</span></td>
+                        <td class="p-4 text-emerald-600 font-black">${r.amt.toLocaleString()}</td>
+                        <td class="p-4 font-mono text-[11px] text-slate-500">${r.ref}</td>
+                        <td class="p-4 text-right text-xs text-slate-400 font-bold">${r.desc}</td>
+                        <td class="p-4 no-print">
+                            ${r.isVisa ? `<button onclick="showVisaDetails('${r.batchKey}')" class="bg-indigo-100 text-indigo-600 p-1 rounded-lg hover:bg-indigo-600 hover:text-white transition-all text-xs">👁️ تفاصيل</button>` : '---'}
                         </td>
-                        <td class="p-5 text-emerald-600 text-xl font-black">${r.amt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td class="p-5 font-mono text-sm text-slate-500">${r.ref}</td>
-                        <td class="p-5 text-right text-xs text-slate-400 font-bold">${r.desc}</td>
                     </tr>`;
             });
         }
 
+        function showVisaDetails(key) {
+            const modal = document.getElementById('detailsModal');
+            const content = document.getElementById('modalContent');
+            let data = visaDetailsDB[key];
+            let html = `<table class="w-full text-sm text-center">
+                        <thead class="bg-slate-100 italic font-bold"><tr><th class="p-2">المبلغ</th><th class="p-2">العدد</th><th class="p-2">تفاصيل إضافية</th></tr></thead><tbody>`;
+            data.forEach(d => {
+                html += `<tr class="border-b"><td class="p-2 text-emerald-600 font-bold">${d.amount}</td><td class="p-2">${d.count || 1}</td><td class="p-2 text-xs text-slate-500">${d.calcDetails || 'لا يوجد'}</td></tr>`;
+            });
+            html += `</tbody></table>`;
+            content.innerHTML = html;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('detailsModal').style.display = 'none'; }
+
+        function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            doc.addFont('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf', 'Roboto', 'normal');
+            doc.setFont('Roboto');
+            
+            doc.text("Report: Financial Audit", 10, 10);
+            doc.autoTable({
+                head: [['Date', 'Branch', 'Type', 'Amount', 'Ref', 'Details']],
+                body: finalReport.map(r => [r.date, r.bName, r.type, r.amt, r.ref, r.desc]),
+                startY: 20,
+                styles: { fontSize: 8 }
+            });
+            doc.save("Audit_Report.pdf");
+        }
+
+        function sendWhatsApp() {
+            let text = "📋 *ملخص تقرير الرقابة اليومي* \n\n";
+            finalReport.slice(0, 10).forEach(r => {
+                text += `📅 ${r.date} | 🏥 ${r.bName} \n 💰 ${r.amt} (${r.type}) \n 🔢 ${r.ref} \n ------------------ \n`;
+            });
+            let url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
         function exportToExcel() {
-            if(finalReport.length === 0) return alert("لا توجد بيانات");
-            const ws = XLSX.utils.json_to_sheet(finalReport.map(r => ({
-                "التاريخ": r.date, "الفرع": r.bName, "النوع": r.type, "المبلغ": r.amt, "المرجع": r.ref, "البيان": r.desc
-            })));
+            const ws = XLSX.utils.json_to_sheet(finalReport.map(r => ({ "التاريخ": r.date, "الفرع": r.bName, "النوع": r.type, "المبلغ": r.amt, "المرجع": r.ref, "البيان": r.desc })));
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "تقرير الرقابة");
-            XLSX.writeFile(wb, `Audit_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "Statement");
+            XLSX.writeFile(wb, "Report.xlsx");
         }
     </script>
 </body>
